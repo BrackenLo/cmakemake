@@ -1,0 +1,11 @@
+[package]
+name = "cmakemake"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+colored = "3.0.0"
+duct = "0.13.7"
+git2 = "0.20.0"
+serde = { version = "1.0.218", features = ["derive"] }
+toml = "0.8.20"
