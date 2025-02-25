@@ -79,7 +79,7 @@ struct Project {
 
 #[derive(serde::Deserialize, serde::Serialize)]
 struct CMake {
-    minumum_required: f32,
+    minimum_required: f64,
 }
 
 const DEFAULT_MAIN_FILE: &str = r#"#include <iostream>
@@ -116,7 +116,7 @@ fn new_project() -> Result<(), ProjectError> {
             version: 1.0,
         },
         cmake: CMake {
-            minumum_required: 3.15,
+            minimum_required: 3.15,
         },
     };
 
@@ -159,7 +159,7 @@ fn generate_cmake() -> Result<(), ProjectError> {
     writeln!(
         file,
         "cmake_minimum_required(VERSION {})",
-        config.cmake.minumum_required
+        config.cmake.minimum_required
     )
     .unwrap();
 
@@ -179,7 +179,7 @@ fn generate_cmake() -> Result<(), ProjectError> {
     file.flush().unwrap();
 
     println!(
-        "{} {} {:.2}s",
+        "{} {} {:.3}s",
         "Finished".green().bold(),
         "creating CMakeLists.txt in",
         instant.elapsed().as_secs_f32(),
@@ -218,8 +218,7 @@ fn build_project() -> Result<(), ProjectError> {
         ))?;
     }
 
-    println!("");
-    println!("{}", "Compiling c++ project".green());
+    println!("\n{}", "Compiling c++ project".green());
 
     let output = duct::cmd!("cmake", "--build", "build")
         .stderr_to_stdout()
@@ -265,7 +264,7 @@ fn run_project() -> Result<(), ProjectError> {
         .run()
         .unwrap();
 
-    println!("{} {}", "Finished".green().bold(), "program execution");
+    println!("\n\n{} {}", "Finished".green().bold(), "program execution");
 
     Ok(())
 }
