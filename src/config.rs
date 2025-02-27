@@ -1,30 +1,30 @@
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize, Hash)]
 pub struct ConfigFile {
     pub project: Project,
     pub cmake: CMake,
     pub dependencies: Dependencies,
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize, Hash)]
 pub struct Project {
     pub name: String,
-    pub version: f32,
+    pub version: ordered_float::OrderedFloat<f64>,
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize, Hash)]
 pub struct CMake {
-    pub minimum_required: f64,
+    pub minimum_required: ordered_float::OrderedFloat<f64>,
     pub files: IncludeFiles,
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize, Hash)]
 pub enum IncludeFiles {
     AllRecurse,
     All,
     Exclude(Vec<String>),
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize, Hash)]
 pub struct Dependencies {
     pub local: Vec<LocalDependency>,
     pub fetch_content: Vec<FetchDependency>,
@@ -32,7 +32,7 @@ pub struct Dependencies {
     pub project_dependencies: Vec<String>,
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize, Hash)]
 pub struct LocalDependency {
     pub path: String,
     pub name: String,
@@ -40,7 +40,7 @@ pub struct LocalDependency {
     pub variables: Vec<(String, String)>,
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize, Hash)]
 pub enum LocalType {
     CMake,
     Source {
@@ -49,7 +49,7 @@ pub enum LocalType {
     },
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize, Hash)]
 pub struct FetchDependency {
     name: String,
 }
@@ -59,10 +59,10 @@ impl Default for ConfigFile {
         Self {
             project: Project {
                 name: String::from("UNKNOWN"),
-                version: 1.0,
+                version: ordered_float::OrderedFloat(1.0),
             },
             cmake: CMake {
-                minimum_required: 3.15,
+                minimum_required: ordered_float::OrderedFloat(3.15),
                 files: IncludeFiles::AllRecurse,
             },
             dependencies: Dependencies {
@@ -77,7 +77,10 @@ impl Default for ConfigFile {
 impl ConfigFile {
     pub fn new(name: String) -> Self {
         Self {
-            project: Project { name, version: 1.0 },
+            project: Project {
+                name,
+                version: ordered_float::OrderedFloat(1.0),
+            },
             ..Default::default()
         }
     }

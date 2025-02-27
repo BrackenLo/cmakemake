@@ -1,5 +1,6 @@
 use std::{
-    io::Write,
+    hash::{Hash, Hasher},
+    io::{BufRead, Write},
     path::{Path, PathBuf},
 };
 
@@ -286,6 +287,13 @@ fn generate_cmake() -> Result<(), ProjectError> {
         .open(Path::new("CMakeLists.txt"))
         .unwrap();
 
+    // Config Hash
+    let mut hasher = std::hash::DefaultHasher::new();
+    config.hash(&mut hasher);
+    let config_hash = hasher.finish();
+
+    writeln!(file, "# {}\n", config_hash).unwrap();
+
     // Project Setup
     writeln!(
         file,
@@ -430,14 +438,31 @@ fn generate_cmake() -> Result<(), ProjectError> {
 fn build_project() -> Result<(), ProjectError> {
     println!("Building Project");
 
-    if Path::new(CONFIG_NAME).exists() == false {
-        return Err(ProjectError::InvalidProjectDirectory);
-    }
+    let config = get_config()?;
 
     if Path::new("CMakeLists.txt").exists() == false {
         println!("{} {}", "warning:".yellow(), "CMakeLists.txt doesn't exist");
         generate_cmake()?;
         println!("");
+    } else {
+        let mut hasher = std::hash::DefaultHasher::new();
+        config.hash(&mut hasher);
+        let config_hash = hasher.finish();
+
+        let cmake_file = open_file(&Path::new("CMakeLists.txt"))?;
+        let mut buffer = std::io::BufReader::new(cmake_file);
+        let mut first_line = String::new();
+        buffer.read_line(&mut first_line).unwrap();
+
+        if first_line != format!("# {}\n", config_hash) {
+            println!(
+                "{} {}",
+                "warning:".yellow(),
+                "CMakeLists.txt out of date. Regenerating."
+            );
+            generate_cmake()?;
+            println!("");
+        }
     }
 
     println!("{}", "Generating CMake build system".green());
