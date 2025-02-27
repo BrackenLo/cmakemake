@@ -51,7 +51,12 @@ pub enum LocalType {
 
 #[derive(serde::Deserialize, serde::Serialize, Hash)]
 pub struct FetchDependency {
-    name: String,
+    pub name: String,
+    pub variables: Vec<(String, String)>,
+
+    pub repo: String,
+    pub tag: Option<String>,
+    pub branch: Option<String>,
 }
 
 impl Default for ConfigFile {

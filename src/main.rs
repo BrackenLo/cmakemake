@@ -5,11 +5,12 @@ use std::{
 };
 
 use colored::Colorize;
-use config::{ConfigFile, LocalDependency};
+use config::ConfigFile;
 use error::{DisplayError, ProjectError};
 use util::*;
 
 mod config;
+mod dependencies;
 mod error;
 mod util;
 
@@ -127,139 +128,22 @@ fn add_dependency() -> Result<(), ProjectError> {
 
     let dep_type = inquire::Select::new(
         "Choose the Dependency Type:",
-        vec!["Local", "Fetch", "Conan"],
+        vec![
+            "Local",             // 0
+            "Git Submodule",     // 1
+            "Fetch Git (CMake)", // 2
+            "Conan",             // 3
+        ],
     )
-    .prompt()
+    .raw_prompt()
     .unwrap();
 
-    match dep_type {
-        "Local" => {
-            let path = inquire::Text::new("Path:")
-                .with_validator(inquire::validator::ValueRequiredValidator::default())
-                .with_help_message("Choose a path relative to the project folder")
-                .with_autocomplete(FolderAutocomplete(std::env::current_dir().unwrap()))
-                .with_validator(folder_validator)
-                .with_validator(not_own_folder_validator)
-                .with_formatter(&path_formater)
-                .prompt()
-                .unwrap();
-
-            let path_buf = PathBuf::from(&path);
-            if path_buf.exists() {
-                ProjectError::CannotOpenFile(path_buf.clone(), "Path doesn't exist".to_owned());
-            }
-
-            let default_name = path_buf.file_name().unwrap_or_default().to_str().unwrap();
-            let name = inquire::Text::new("Dependency Name:")
-                .with_default(default_name)
-                .with_validator(inquire::validator::ValueRequiredValidator::default())
-                .prompt()
-                .unwrap();
-
-            println!("Any variables/flags");
-
-            let mut flags = Vec::new();
-
-            loop {
-                match inquire::Text::new(" > ")
-                    .with_validator(dep_flag_validation)
-                    .with_placeholder("[NAME] [VALUES]...")
-                    .with_help_message("Any Variables/Flags")
-                    .prompt_skippable()
-                    .unwrap()
-                {
-                    Some(val) => {
-                        if val.is_empty() {
-                            break;
-                        }
-                        flags.push(val)
-                    }
-                    None => break,
-                }
-            }
-
-            let variables = flags
-                .into_iter()
-                .map(|var| {
-                    let name = var.split_whitespace().nth(0).unwrap().to_owned();
-                    let value = var[name.len()..].to_owned();
-
-                    (name, value)
-                })
-                .collect();
-
-            let local_type = match inquire::Confirm::new("Dependency uses CMake?")
-                .with_placeholder("y/n")
-                .prompt()
-                .unwrap()
-            {
-                true => config::LocalType::CMake,
-
-                false => {
-                    let files = inquire::Select::new(
-                        "Included files",
-                        vec![
-                            "All (recursive)", // 0
-                            "All",             // 1
-                            "All (Exclude)",   // 2
-                        ],
-                    )
-                    .raw_prompt()
-                    .unwrap();
-
-                    let files = match files.index {
-                        0 => config::IncludeFiles::AllRecurse,
-                        1 => config::IncludeFiles::All,
-                        2 => todo!(),
-
-                        _ => return Err(ProjectError::UnknownArgument(files.value.into())),
-                    };
-
-                    let mut dependencies = Vec::new();
-                    println!("Library dependencies");
-                    loop {
-                        match inquire::Text::new(" > ")
-                            .with_help_message("Press enter or esc to proceed")
-                            .prompt_skippable()
-                            .unwrap()
-                        {
-                            Some(val) => {
-                                if val.is_empty() {
-                                    break;
-                                }
-                                dependencies.push(val);
-                            }
-                            None => break,
-                        }
-                    }
-
-                    config::LocalType::Source {
-                        files,
-                        dependencies,
-                    }
-                }
-            };
-
-            config.dependencies.local.push(LocalDependency {
-                path,
-                name: name.clone(),
-                local_type,
-                variables,
-            });
-
-            if inquire::Confirm::new("Add as project dependency?")
-                .with_placeholder("y/n")
-                .with_default(true)
-                .prompt()
-                .unwrap()
-            {
-                config.dependencies.project_dependencies.push(name);
-            }
-        }
-
-        "Fetch" => {}
-        "Conan" => {}
-        e => return Err(ProjectError::UnknownArgument(e.into())),
+    match dep_type.index {
+        0 => dependencies::add_local_dependency(&mut config)?,
+        1 => dependencies::add_git_submodule(&mut config)?,
+        2 => dependencies::add_fetch_dependency(&mut config)?,
+        3 => todo!(),
+        _ => return Err(ProjectError::UnknownArgument(dep_type.value.into())),
     }
 
     write_config(config)?;
@@ -271,6 +155,33 @@ fn add_dependency() -> Result<(), ProjectError> {
         .ok();
 
     Ok(())
+}
+
+fn write_include_flags(
+    file: &mut std::fs::File,
+    source_name: &str,
+    path: &str,
+    files: &config::IncludeFiles,
+) -> Result<(), std::io::Error> {
+    match files {
+        config::IncludeFiles::AllRecurse => writeln!(
+            file,
+            r#"file(GLOB_RECURSE {source_name} "{path}/*.cpp" "{path}/*.hpp" "{path}/.h")"#,
+        ),
+
+        config::IncludeFiles::All => writeln!(
+            file,
+            r#"file(GLOB {source_name} "{path}/*.cpp" "{path}/*.hpp" "{path}/.h")"#,
+        ),
+
+        config::IncludeFiles::Exclude(items) => write!(
+            file,
+            r#"file(GLOB_RECURSE {source_name} "{path}/*.cpp" "{path}/*.hpp" "{path}/.h") \nlist(REMOVE_ITEM SOURCES {})"#,
+            items
+                .iter()
+                .fold(String::new(), |a, b| format!(r#"{} "{}/{}""#, a, path, b))
+        ),
+    }
 }
 
 fn generate_cmake() -> Result<(), ProjectError> {
@@ -335,28 +246,7 @@ fn generate_cmake() -> Result<(), ProjectError> {
 
                 let src_name = format!("{}_SOURCES", name.to_uppercase());
 
-                match files {
-                    config::IncludeFiles::AllRecurse => writeln!(
-                        file,
-                        r#"file(GLOB_RECURSE {} "{path}/*.cpp" "{path}/*.hpp" "{path}/.h")"#,
-                        src_name,
-                    ),
-
-                    config::IncludeFiles::All => writeln!(
-                        file,
-                        r#"file(GLOB {} "{path}/*.cpp" "{path}/*.hpp" "{path}/.h")"#,
-                        src_name,
-                    ),
-
-                    config::IncludeFiles::Exclude(items) => write!(
-                        file,
-                        r#"file(GLOB_RECURSE {src_name} "{path}/*.cpp" "{path}/*.hpp" "{path}/.h") \nlist(REMOVE_ITEM SOURCES {})"#,
-                        items.iter().fold(String::new(), |a, b| format!(
-                            r#"{} "{}/{}""#,
-                            a, local.path, b
-                        ))
-                    ),
-                }.unwrap();
+                write_include_flags(&mut file, &src_name, &local.path, files).unwrap();
 
                 writeln!(file, "add_library({name} ${{{src_name}}})").unwrap();
                 writeln!(file, "target_include_directories({name} PUBLIC {path})").unwrap();
@@ -377,38 +267,31 @@ fn generate_cmake() -> Result<(), ProjectError> {
         writeln!(file, "").unwrap();
     });
 
+    config.dependencies.fetch_content.iter().for_each(|fetch| {
+        fetch
+            .variables
+            .iter()
+            .for_each(|var| writeln!(file, "set({: <20} {: <20})", var.0, var.1).unwrap());
+
+        writeln!(file, "FetchContentDeclare({}", fetch.name).unwrap();
+        writeln!(file, "\tGIT_REPOSITORY {}", fetch.repo).unwrap();
+        if let Some(tag) = &fetch.tag {
+            writeln!(file, "\tGIT_TAG {}", tag).unwrap();
+        }
+        if let Some(branch) = &fetch.branch {
+            writeln!(file, "\tGIT_BRANCH {}", branch).unwrap();
+        }
+
+        writeln!(file, "\tGIT_SHALLOW TRUE").unwrap();
+        writeln!(file, "\tGIT_PROGRESS TRUE").unwrap();
+
+        writeln!(file, ")\nFetchContent_MakeAvailable({})\n", fetch.name).unwrap();
+    });
+
     writeln!(file, "#Project Files:").unwrap();
 
     // Project files
-    match config.cmake.files {
-        config::IncludeFiles::AllRecurse => {
-            writeln!(
-                file,
-                r#"file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.hpp" "src/*.h")"#
-            )
-            .unwrap();
-        }
-
-        config::IncludeFiles::All => {
-            writeln!(
-                file,
-                r#"file(GLOB SOURCES "src/*.cpp" "src/*.hpp" "src/*.h")"#
-            )
-            .unwrap();
-        }
-
-        config::IncludeFiles::Exclude(items) => {
-            writeln!(
-                file,
-                r#"file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.hpp" "src/*.h")
-                list(REMOVE_ITEM SOURCES "{}")"#,
-                items
-                    .iter()
-                    .fold(String::new(), |a, b| format!("{} {}", a, b))
-            )
-            .unwrap();
-        }
-    }
+    write_include_flags(&mut file, "SOURCES", "src", &config.cmake.files).unwrap();
 
     // Link files
     writeln!(file, r#"add_executable("${{PROJECT_NAME}}" ${{SOURCES}})"#).unwrap();
