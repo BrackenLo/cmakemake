@@ -144,7 +144,7 @@ pub fn dep_flag_validation(input: &str) -> Result<Validation, inquire::CustomUse
     Ok(valid)
 }
 
-pub fn folder_validation(input: &str) -> Result<Validation, inquire::CustomUserError> {
+pub fn folder_validator(input: &str) -> Result<Validation, inquire::CustomUserError> {
     let path = PathBuf::from(input);
 
     if !path.exists() {
@@ -160,4 +160,36 @@ pub fn folder_validation(input: &str) -> Result<Validation, inquire::CustomUserE
     }
 
     Ok(Validation::Valid)
+}
+
+pub fn not_own_folder_validator(input: &str) -> Result<Validation, inquire::CustomUserError> {
+    match input {
+        "./" => Ok(Validation::Invalid(ErrorMessage::Custom(
+            "Cannot be project director".into(),
+        ))),
+        _ => Ok(Validation::Valid),
+    }
+}
+
+pub fn path_formater(path: &str) -> String {
+    let mut trimmed = path.trim();
+
+    if let Some(val) = path.split_at_checked(2) {
+        if val.0 == "./" {
+            let mut chars = trimmed.chars();
+            chars.next();
+            chars.next();
+            trimmed = chars.as_str()
+        }
+    }
+
+    let last_char = trimmed.chars().last().unwrap();
+
+    if last_char == '/' {
+        let mut chars = trimmed.chars();
+        chars.next_back();
+        return chars.as_str().to_owned();
+    }
+
+    trimmed.to_owned()
 }

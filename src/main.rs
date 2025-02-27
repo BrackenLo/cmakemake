@@ -137,7 +137,9 @@ fn add_dependency() -> Result<(), ProjectError> {
                 .with_validator(inquire::validator::ValueRequiredValidator::default())
                 .with_help_message("Choose a path relative to the project folder")
                 .with_autocomplete(FolderAutocomplete(std::env::current_dir().unwrap()))
-                .with_validator(folder_validation)
+                .with_validator(folder_validator)
+                .with_validator(not_own_folder_validator)
+                .with_formatter(&path_formater)
                 .prompt()
                 .unwrap();
 
@@ -193,27 +195,39 @@ fn add_dependency() -> Result<(), ProjectError> {
                 true => config::LocalType::CMake,
 
                 false => {
-                    let files =
-                        inquire::Select::new("Included files", vec!["All", "All (Exclude)"])
-                            .raw_prompt()
-                            .unwrap();
+                    let files = inquire::Select::new(
+                        "Included files",
+                        vec![
+                            "All (recursive)", // 0
+                            "All",             // 1
+                            "All (Exclude)",   // 2
+                        ],
+                    )
+                    .raw_prompt()
+                    .unwrap();
 
                     let files = match files.index {
-                        0 => config::IncludeFiles::All,
-                        1 => todo!(),
+                        0 => config::IncludeFiles::AllRecurse,
+                        1 => config::IncludeFiles::All,
+                        2 => todo!(),
 
                         _ => return Err(ProjectError::UnknownArgument(files.value.into())),
                     };
 
                     let mut dependencies = Vec::new();
+                    println!("Library dependencies");
                     loop {
                         match inquire::Text::new(" > ")
-                            .with_validator(dep_flag_validation)
-                            .with_placeholder("[NAME] [VALUES]...")
+                            .with_help_message("Press enter or esc to proceed")
                             .prompt_skippable()
                             .unwrap()
                         {
-                            Some(val) => dependencies.push(val),
+                            Some(val) => {
+                                if val.is_empty() {
+                                    break;
+                                }
+                                dependencies.push(val);
+                            }
                             None => break,
                         }
                     }
@@ -234,6 +248,7 @@ fn add_dependency() -> Result<(), ProjectError> {
 
             if inquire::Confirm::new("Add as project dependency?")
                 .with_placeholder("y/n")
+                .with_default(true)
                 .prompt()
                 .unwrap()
             {
@@ -267,6 +282,7 @@ fn generate_cmake() -> Result<(), ProjectError> {
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .create(true)
+        .truncate(true)
         .open(Path::new("CMakeLists.txt"))
         .unwrap();
 
@@ -281,7 +297,7 @@ fn generate_cmake() -> Result<(), ProjectError> {
     writeln!(file, r#"project("{}")"#, config.project.name).unwrap();
 
     // Project top config
-    writeln!(file, "\n").unwrap();
+    writeln!(file, "\n#Project Config Flags:").unwrap();
 
     if config.dependencies.fetch_content.is_empty() == false {
         writeln!(file, "include(FetchContent)").unwrap();
@@ -291,7 +307,7 @@ fn generate_cmake() -> Result<(), ProjectError> {
     writeln!(file, "set(CMAKE_EXPORT_COMPILE_COMMANDS ON)").unwrap();
 
     // Project Dependencies
-    writeln!(file, "\n").unwrap();
+    writeln!(file, "\n#Project Dependencies: ").unwrap();
 
     config.dependencies.local.iter().for_each(|local| {
         local
@@ -311,35 +327,36 @@ fn generate_cmake() -> Result<(), ProjectError> {
 
                 let src_name = format!("{}_SOURCES", name.to_uppercase());
 
-                let files = match files {
-                    config::IncludeFiles::All => format!(
+                match files {
+                    config::IncludeFiles::AllRecurse => writeln!(
+                        file,
                         r#"file(GLOB_RECURSE {} "{path}/*.cpp" "{path}/*.hpp" "{path}/.h")"#,
                         src_name,
                     ),
 
-                    config::IncludeFiles::Exclude(items) => format!(
-                        r#"file(GLOB_RECURSE {} "{path}/*.cpp" "{path}/*.hpp" "{path}/.h")"
-                        list(REMOVE_ITEM SOURCES {})"#,
+                    config::IncludeFiles::All => writeln!(
+                        file,
+                        r#"file(GLOB {} "{path}/*.cpp" "{path}/*.hpp" "{path}/.h")"#,
                         src_name,
+                    ),
+
+                    config::IncludeFiles::Exclude(items) => write!(
+                        file,
+                        r#"file(GLOB_RECURSE {src_name} "{path}/*.cpp" "{path}/*.hpp" "{path}/.h") \nlist(REMOVE_ITEM SOURCES {})"#,
                         items.iter().fold(String::new(), |a, b| format!(
                             r#"{} "{}/{}""#,
                             a, local.path, b
                         ))
                     ),
-                };
+                }.unwrap();
 
-                writeln!(
-                    file,
-                    r#"{files}
-                    add_library({name} ${{{src_name}}})
-                    target_include_directories({name} PUBLIC {path})"#
-                )
-                .unwrap();
+                writeln!(file, "add_library({name} ${{{src_name}}})").unwrap();
+                writeln!(file, "target_include_directories({name} PUBLIC {path})").unwrap();
 
                 if dependencies.is_empty() == false {
                     writeln!(
                         file,
-                        "{name} PUBLIC {}",
+                        "target_link_libraries({name} PUBLIC {})",
                         dependencies
                             .iter()
                             .fold(String::new(), |a, b| format!("{} {}", a, b))
@@ -352,12 +369,22 @@ fn generate_cmake() -> Result<(), ProjectError> {
         writeln!(file, "").unwrap();
     });
 
+    writeln!(file, "#Project Files:").unwrap();
+
     // Project files
     match config.cmake.files {
-        config::IncludeFiles::All => {
+        config::IncludeFiles::AllRecurse => {
             writeln!(
                 file,
                 r#"file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.hpp" "src/*.h")"#
+            )
+            .unwrap();
+        }
+
+        config::IncludeFiles::All => {
+            writeln!(
+                file,
+                r#"file(GLOB SOURCES "src/*.cpp" "src/*.hpp" "src/*.h")"#
             )
             .unwrap();
         }
@@ -376,7 +403,6 @@ fn generate_cmake() -> Result<(), ProjectError> {
     }
 
     // Link files
-    writeln!(file, "\n").unwrap();
     writeln!(file, r#"add_executable("${{PROJECT_NAME}}" ${{SOURCES}})"#).unwrap();
     writeln!(
         file,

@@ -19,6 +19,7 @@ pub struct CMake {
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub enum IncludeFiles {
+    AllRecurse,
     All,
     Exclude(Vec<String>),
 }
@@ -62,7 +63,7 @@ impl Default for ConfigFile {
             },
             cmake: CMake {
                 minimum_required: 3.15,
-                files: IncludeFiles::All,
+                files: IncludeFiles::AllRecurse,
             },
             dependencies: Dependencies {
                 local: Vec::new(),
