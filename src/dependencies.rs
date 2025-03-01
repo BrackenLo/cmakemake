@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::{
-    config::{self, ConfigFile, LocalDependency},
+    config::{self, CacheSubmodule, ConfigFile, LocalDependency},
     error::{DisplayError, ProjectError},
     util::{
         dep_flag_validation, folder_validator, get_cache, not_own_folder_validator, path_formater,
@@ -294,14 +294,16 @@ fn cache_git_submodule(submodule: config::GitSubmodule) -> Result<(), ProjectErr
     let mut cache = get_cache()?;
 
     let lib_name = submodule_name(&submodule.repo).to_owned();
-    cache.git_submodules.push((lib_name, submodule));
+    cache.git_submodules.push(CacheSubmodule {
+        name: lib_name,
+        submodule,
+    });
 
     write_cache(cache)?;
     Ok(())
 }
 
 // SUBMODULES only for now
-// TODO - Add fetch content stuff
 pub fn add_cached_dependency(config: &mut ConfigFile) -> Result<(), ProjectError> {
     let cache = get_cache()?;
 
@@ -312,7 +314,7 @@ pub fn add_cached_dependency(config: &mut ConfigFile) -> Result<(), ProjectError
 
     let selection = inquire::MultiSelect::new(
         "Choose a dependency:",
-        cache.git_submodules.iter().map(|val| &val.0).collect(),
+        cache.git_submodules.iter().map(|val| &val.name).collect(),
     )
     .raw_prompt()
     .unwrap();
@@ -320,7 +322,7 @@ pub fn add_cached_dependency(config: &mut ConfigFile) -> Result<(), ProjectError
     let val = selection
         .into_iter()
         .map(|entry| {
-            let (_, submodule) = cache.git_submodules.get(entry.index).unwrap();
+            let CacheSubmodule { submodule, .. } = cache.git_submodules.get(entry.index).unwrap();
 
             add_submodule(
                 &submodule.repo,

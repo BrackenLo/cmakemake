@@ -81,7 +81,13 @@ impl ConfigFile {
 
 #[derive(serde::Deserialize, serde::Serialize, Default)]
 pub struct Cache {
-    pub git_submodules: Vec<(String, GitSubmodule)>,
+    pub git_submodules: Vec<CacheSubmodule>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+pub struct CacheSubmodule {
+    pub name: String,
+    pub submodule: GitSubmodule,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Hash)]
