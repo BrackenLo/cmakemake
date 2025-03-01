@@ -29,6 +29,7 @@ fn main() -> Result<(), ProjectError> {
         "cmake" => generate_cmake().display_error(),
         "build" => build_project().display_error(),
         "run" => run_project().display_error(),
+        "ignore" => add_ignore().display_error(),
         "clean" => clean_project().display_error(),
 
         "help" => print_help(),
@@ -68,6 +69,7 @@ fn print_help() {
         "clean",
         "remove c++ build files (and optionally cmake files)",
     );
+    print_command("ignore", "Create a .ignore file for external/ and res/");
     print_command("help", "Output this help message");
 }
 
@@ -96,7 +98,7 @@ fn new_project() -> Result<(), ProjectError> {
     // Init Git Repo
     git2::Repository::init(&path).map_err(|err| ProjectError::FailedToInitGit(err.to_string()))?;
 
-    init_file(&path.join(Path::new(".gitignore")), "build".as_bytes())?;
+    init_file(&path.join(Path::new(".gitignore")), b"build")?;
 
     // Init Config File
     let config = ConfigFile::new(name);
@@ -425,6 +427,28 @@ fn clean_project() -> Result<(), ProjectError> {
     }
 
     println!("{} {}", "Finished".green(), "removing build files");
+
+    Ok(())
+}
+
+fn add_ignore() -> Result<(), ProjectError> {
+    println!("Adding .ignore");
+
+    if Path::new(CONFIG_NAME).exists() == false {
+        return Err(ProjectError::InvalidProjectDirectory);
+    }
+
+    let ignore_path = Path::new(".ignore");
+
+    match ignore_path.exists() {
+        true => {
+            println!(".ignore file already exists");
+        }
+        false => {
+            println!("Creating .ignore file");
+            init_file(&Path::new(".ignore"), b"external/\nres/")?;
+        }
+    }
 
     Ok(())
 }
