@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::{
-    config::{self, CacheSubmodule, ConfigFile, LocalDependency},
+    config::{self, CacheSubmodule, ConfigFile, FindDependency, LocalDependency},
     error::{DisplayError, ProjectError},
     util::{
         dep_flag_validation, folder_validator, get_cache, not_own_folder_validator, path_formater,
@@ -44,6 +44,17 @@ fn get_dependency_variables() -> Vec<(String, String)> {
     variables
 }
 
+fn get_is_project_dependency(config: &mut ConfigFile, name: String) {
+    if inquire::Confirm::new("Add as project dependency?")
+        .with_placeholder("y/n")
+        .with_default(true)
+        .prompt()
+        .unwrap()
+    {
+        config.dependencies.project_dependencies.push(name);
+    }
+}
+
 pub fn add_local_dependency_path(
     config: &mut ConfigFile,
     path: String,
@@ -82,8 +93,8 @@ pub fn add_local_dependency_path(
             .unwrap();
 
             let files = match files.index {
-                0 => config::IncludeFiles::AllRecurse,
-                1 => config::IncludeFiles::All,
+                0 => config::IncludeFiles::All,
+                1 => config::IncludeFiles::Root,
                 2 => todo!(),
 
                 _ => return Err(ProjectError::UnknownArgument(files.value.into())),
@@ -123,14 +134,7 @@ pub fn add_local_dependency_path(
 
     config.dependencies.local.push(local_dependency.clone());
 
-    if inquire::Confirm::new("Add as project dependency?")
-        .with_placeholder("y/n")
-        .with_default(true)
-        .prompt()
-        .unwrap()
-    {
-        config.dependencies.project_dependencies.push(name);
-    }
+    get_is_project_dependency(config, name);
 
     Ok(local_dependency)
 }
@@ -293,17 +297,24 @@ fn add_submodule(
 fn cache_git_submodule(submodule: config::GitSubmodule) -> Result<(), ProjectError> {
     let mut cache = get_cache()?;
 
-    let lib_name = submodule_name(&submodule.repo).to_owned();
-    cache.git_submodules.push(CacheSubmodule {
-        name: lib_name,
-        submodule,
-    });
+    let mut name = submodule_name(&submodule.repo).to_owned();
+
+    if let Some(tag) = &submodule.tag {
+        name = format!("{} - tags/{}", name, tag);
+    }
+
+    if let Some(branch) = &submodule.branch {
+        name = format!("{} - branch/{}", name, branch);
+    }
+
+    cache
+        .git_submodules
+        .push(CacheSubmodule { name, submodule });
 
     write_cache(cache)?;
     Ok(())
 }
 
-// SUBMODULES only for now
 pub fn add_cached_dependency(config: &mut ConfigFile) -> Result<(), ProjectError> {
     let cache = get_cache()?;
 
@@ -335,17 +346,7 @@ pub fn add_cached_dependency(config: &mut ConfigFile) -> Result<(), ProjectError
                 .local
                 .push(submodule.local_setup.clone());
 
-            if inquire::Confirm::new("Add as project dependency?")
-                .with_placeholder("y/n")
-                .with_default(true)
-                .prompt()
-                .unwrap()
-            {
-                config
-                    .dependencies
-                    .project_dependencies
-                    .push(submodule.local_setup.name.clone());
-            }
+            get_is_project_dependency(config, submodule.local_setup.name.clone());
 
             Ok(())
         })
@@ -354,6 +355,28 @@ pub fn add_cached_dependency(config: &mut ConfigFile) -> Result<(), ProjectError
     val.into_iter()
         .filter_map(|val| val.err())
         .for_each(|err| Err::<(), _>(err).display_error());
+
+    Ok(())
+}
+
+pub fn add_find_dependency(config: &mut ConfigFile) -> Result<(), ProjectError> {
+    let name = inquire::Text::new("Dependency Name:")
+        .with_validator(inquire::validator::ValueRequiredValidator::default())
+        .prompt()
+        .unwrap();
+
+    let required = inquire::Confirm::new("Dependency required?")
+        .with_default(true)
+        .with_placeholder("Y/n")
+        .prompt()
+        .unwrap();
+
+    config.dependencies.find.push(FindDependency {
+        name: name.clone(),
+        required,
+    });
+
+    get_is_project_dependency(config, name);
 
     Ok(())
 }

@@ -2,6 +2,7 @@
 pub struct ConfigFile {
     pub project: Project,
     pub cmake: CMake,
+    #[serde(default)]
     pub dependencies: Dependencies,
 }
 
@@ -19,16 +20,24 @@ pub struct CMake {
 
 #[derive(serde::Deserialize, serde::Serialize, Hash, Clone)]
 pub enum IncludeFiles {
-    AllRecurse,
     All,
+    Root,
     Exclude(Vec<String>),
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Hash)]
+#[derive(serde::Deserialize, serde::Serialize, Hash, Default)]
+#[serde(default)]
 pub struct Dependencies {
+    pub find: Vec<FindDependency>,
     pub local: Vec<LocalDependency>,
 
     pub project_dependencies: Vec<String>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Hash, Clone)]
+pub struct FindDependency {
+    pub name: String,
+    pub required: bool,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Hash, Clone)]
@@ -57,9 +66,10 @@ impl Default for ConfigFile {
             },
             cmake: CMake {
                 minimum_required: ordered_float::OrderedFloat(3.15),
-                files: IncludeFiles::AllRecurse,
+                files: IncludeFiles::All,
             },
             dependencies: Dependencies {
+                find: Vec::new(),
                 local: Vec::new(),
                 project_dependencies: Vec::new(),
             },

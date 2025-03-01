@@ -133,7 +133,8 @@ fn add_dependency() -> Result<(), ProjectError> {
         vec![
             "Pre-Cached",    // 0
             "Git Submodule", // 1
-            "Local",         // 2
+            "Find",          // 2
+            "Local",         // 3
         ],
     )
     .raw_prompt()
@@ -142,7 +143,8 @@ fn add_dependency() -> Result<(), ProjectError> {
     match dep_type.index {
         0 => dependencies::add_cached_dependency(&mut config)?,
         1 => dependencies::add_git_submodule(&mut config)?,
-        2 => dependencies::add_local_dependency(&mut config)?,
+        2 => dependencies::add_find_dependency(&mut config)?,
+        3 => dependencies::add_local_dependency(&mut config)?,
         _ => return Err(ProjectError::UnknownArgument(dep_type.value.into())),
     }
 
@@ -160,12 +162,12 @@ fn write_include_flags(
     files: &config::IncludeFiles,
 ) -> Result<(), std::io::Error> {
     match files {
-        config::IncludeFiles::AllRecurse => writeln!(
+        config::IncludeFiles::All => writeln!(
             file,
-            r#"file(GLOB_RECURSE {source_name} "{path}/*.cpp" "{path}/*.hpp" "{path}/.h")"#,
+            r#"file(GLOB_RECURSE {source_name} "{path}/*.cpp" "{path}/*.c" "{path}/*.hpp" "{path}/.h")"#,
         ),
 
-        config::IncludeFiles::All => writeln!(
+        config::IncludeFiles::Root => writeln!(
             file,
             r#"file(GLOB {source_name} "{path}/*.cpp" "{path}/*.hpp" "{path}/.h")"#,
         ),
@@ -219,6 +221,19 @@ fn generate_cmake() -> Result<(), ProjectError> {
 
     // Project Dependencies
     writeln!(file, "\n#Project Dependencies: ").unwrap();
+
+    config.dependencies.find.iter().for_each(|find| {
+        let required = match find.required {
+            true => " REQUIRED",
+            false => "",
+        };
+
+        writeln!(file, "find_package({}{})", find.name, required).unwrap();
+    });
+
+    if config.dependencies.find.is_empty() == false {
+        writeln!(file, "").unwrap();
+    }
 
     config.dependencies.local.iter().for_each(|local| {
         local
