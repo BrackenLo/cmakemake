@@ -108,7 +108,7 @@ pub trait DisplayError {
     fn display_error(self);
 }
 
-impl DisplayError for Result<(), ProjectError> {
+impl<T> DisplayError for Result<T, ProjectError> {
     fn display_error(self) {
         if let Err(e) = self {
             eprintln!("{}", e)

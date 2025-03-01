@@ -129,30 +129,28 @@ fn add_dependency() -> Result<(), ProjectError> {
     let dep_type = inquire::Select::new(
         "Choose the Dependency Type:",
         vec![
-            "Local",             // 0
+            "Pre-Cached",        // 0
             "Git Submodule",     // 1
-            "Fetch Git (CMake)", // 2
-            "Conan",             // 3
+            "Local",             // 2
+            "Fetch Git (CMake)", // 3
+            "Conan",             // 4
         ],
     )
     .raw_prompt()
     .unwrap();
 
     match dep_type.index {
-        0 => dependencies::add_local_dependency(&mut config)?,
+        0 => dependencies::add_cached_dependency(&mut config)?,
         1 => dependencies::add_git_submodule(&mut config)?,
-        2 => dependencies::add_fetch_dependency(&mut config)?,
-        3 => todo!(),
+        2 => dependencies::add_local_dependency(&mut config)?,
+        3 => dependencies::add_fetch_dependency(&mut config)?,
+        4 => todo!(),
         _ => return Err(ProjectError::UnknownArgument(dep_type.value.into())),
     }
 
     write_config(config)?;
 
     println!("{} {}", "Successfully".green(), "added dependency");
-
-    inquire::Confirm::new("Save dependency to cache? (TODO)")
-        .prompt()
-        .ok();
 
     Ok(())
 }

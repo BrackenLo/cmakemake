@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 colored = "3.0.0"
+directories = "6.0.0"
 duct = "0.13.7"
 git2 = "0.20.0"
 inquire = "0.7.5"

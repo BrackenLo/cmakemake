@@ -6,7 +6,7 @@ use std::{
 
 use inquire::validator::{ErrorMessage, Validation};
 
-use crate::{error::ProjectError, ConfigFile, CONFIG_NAME};
+use crate::{config::Cache, error::ProjectError, ConfigFile, CONFIG_NAME};
 
 pub fn create_dir(path: &Path) -> Result<(), ProjectError> {
     std::fs::create_dir(path)
@@ -62,6 +62,50 @@ pub fn write_config(config: ConfigFile) -> Result<(), ProjectError> {
 
     file.write(toml::to_string(&config).unwrap().as_bytes())
         .map_err(|err| ProjectError::FailedToCreateFile(path.to_owned(), err.to_string()))?;
+
+    Ok(())
+}
+
+pub fn get_cache() -> Result<Cache, ProjectError> {
+    let data_dir = directories::BaseDirs::new().unwrap().data_dir().to_owned();
+    let cache_path = data_dir.join("cmakemake/cache.toml");
+
+    if cache_path.exists() == false {
+        return Ok(Cache::default());
+    }
+
+    let mut cache_file = open_file(&cache_path)?;
+
+    let mut buffer = String::new();
+    cache_file
+        .read_to_string(&mut buffer)
+        .map_err(|err| ProjectError::CannotOpenFile(PathBuf::from(CONFIG_NAME), err.to_string()))?;
+
+    let cache: Cache = toml::from_str(&buffer)
+        .map_err(|err| ProjectError::CannotOpenFile(PathBuf::from(CONFIG_NAME), err.to_string()))?;
+
+    Ok(cache)
+}
+
+pub fn write_cache(cache: Cache) -> Result<(), ProjectError> {
+    let data_dir = directories::BaseDirs::new().unwrap().data_dir().to_owned();
+    let cache_dir = data_dir.join("cmakemake");
+
+    if !cache_dir.exists() {
+        create_dir(&cache_dir)?;
+    }
+
+    let cache_path = cache_dir.join("cache.toml");
+
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&cache_path)
+        .unwrap();
+
+    file.write(toml::to_string(&cache).unwrap().as_bytes())
+        .map_err(|err| ProjectError::FailedToCreateFile(cache_path, err.to_string()))?;
 
     Ok(())
 }

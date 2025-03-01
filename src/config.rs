@@ -17,7 +17,7 @@ pub struct CMake {
     pub files: IncludeFiles,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Hash)]
+#[derive(serde::Deserialize, serde::Serialize, Hash, Clone)]
 pub enum IncludeFiles {
     AllRecurse,
     All,
@@ -32,7 +32,7 @@ pub struct Dependencies {
     pub project_dependencies: Vec<String>,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Hash)]
+#[derive(serde::Deserialize, serde::Serialize, Hash, Clone)]
 pub struct LocalDependency {
     pub path: String,
     pub name: String,
@@ -40,7 +40,7 @@ pub struct LocalDependency {
     pub variables: Vec<(String, String)>,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Hash)]
+#[derive(serde::Deserialize, serde::Serialize, Hash, Clone)]
 pub enum LocalType {
     CMake,
     Source {
@@ -89,4 +89,19 @@ impl ConfigFile {
             ..Default::default()
         }
     }
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Default)]
+pub struct Cache {
+    pub git_submodules: Vec<(String, GitSubmodule)>,
+    pub fetch_content: Vec<(String, FetchDependency)>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Hash)]
+pub struct GitSubmodule {
+    pub repo: String,
+    pub tag: Option<String>,
+    pub branch: Option<String>,
+
+    pub local_setup: LocalDependency,
 }
