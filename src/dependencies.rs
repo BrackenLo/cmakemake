@@ -84,9 +84,10 @@ pub fn add_local_dependency_path(
             let files = inquire::Select::new(
                 "Included files",
                 vec![
-                    "All (recursive)", // 0
-                    "All",             // 1
-                    "All (Exclude)",   // 2
+                    "All",           // 0
+                    "Root",          // 1
+                    "All (Exclude)", // 2
+                    "Header Only",   // 3
                 ],
             )
             .raw_prompt()
@@ -96,6 +97,7 @@ pub fn add_local_dependency_path(
                 0 => config::IncludeFiles::All,
                 1 => config::IncludeFiles::Root,
                 2 => todo!(),
+                3 => config::IncludeFiles::Header,
 
                 _ => return Err(ProjectError::UnknownArgument(files.value.into())),
             };

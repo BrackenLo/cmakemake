@@ -23,6 +23,7 @@ pub enum IncludeFiles {
     All,
     Root,
     Exclude(Vec<String>),
+    Header,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Hash, Default)]

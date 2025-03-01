@@ -161,24 +161,24 @@ fn write_include_flags(
     path: &str,
     files: &config::IncludeFiles,
 ) -> Result<(), std::io::Error> {
+    let glob_sources = |glob: &str| {
+        format!(
+            r#"file({glob} {source_name} "{path}/*.cpp" "{path}/*.c" "{path}/*.hpp" "{path}/*.h")"#
+        )
+    };
+
     match files {
-        config::IncludeFiles::All => writeln!(
-            file,
-            r#"file(GLOB_RECURSE {source_name} "{path}/*.cpp" "{path}/*.c" "{path}/*.hpp" "{path}/.h")"#,
-        ),
-
-        config::IncludeFiles::Root => writeln!(
-            file,
-            r#"file(GLOB {source_name} "{path}/*.cpp" "{path}/*.hpp" "{path}/.h")"#,
-        ),
-
+        config::IncludeFiles::All => writeln!(file, "{}", glob_sources("GLOB_RECURSE"),),
+        config::IncludeFiles::Root => writeln!(file, "{}", glob_sources("GLOB")),
         config::IncludeFiles::Exclude(items) => write!(
             file,
-            r#"file(GLOB_RECURSE {source_name} "{path}/*.cpp" "{path}/*.hpp" "{path}/.h") \nlist(REMOVE_ITEM SOURCES {})"#,
+            "{}\nlist(REMOVE_ITEM SOURCES {})",
+            glob_sources("GLOB_RECURSE"),
             items
                 .iter()
                 .fold(String::new(), |a, b| format!(r#"{} "{}/{}""#, a, path, b))
         ),
+        config::IncludeFiles::Header => Ok(()),
     }
 }
 
@@ -253,10 +253,19 @@ fn generate_cmake() -> Result<(), ProjectError> {
 
                 let src_name = format!("{}_SOURCES", name.to_uppercase());
 
-                write_include_flags(&mut file, &src_name, &local.path, files).unwrap();
+                match files {
+                    config::IncludeFiles::Header => {
+                        writeln!(file, "add_library({name} INTERFACE)").unwrap();
+                        writeln!(file, "target_include_directories({name} INTERFACE {path})")
+                            .unwrap();
+                    }
 
-                writeln!(file, "add_library({name} ${{{src_name}}})").unwrap();
-                writeln!(file, "target_include_directories({name} PUBLIC {path})").unwrap();
+                    _ => {
+                        write_include_flags(&mut file, &src_name, &local.path, files).unwrap();
+                        writeln!(file, "add_library({name} ${{{src_name}}})").unwrap();
+                        writeln!(file, "target_include_directories({name} PUBLIC {path})").unwrap();
+                    }
+                }
 
                 if dependencies.is_empty() == false {
                     writeln!(
