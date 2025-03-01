@@ -129,11 +129,9 @@ fn add_dependency() -> Result<(), ProjectError> {
     let dep_type = inquire::Select::new(
         "Choose the Dependency Type:",
         vec![
-            "Pre-Cached",        // 0
-            "Git Submodule",     // 1
-            "Local",             // 2
-            "Fetch Git (CMake)", // 3
-            "Conan",             // 4
+            "Pre-Cached",    // 0
+            "Git Submodule", // 1
+            "Local",         // 2
         ],
     )
     .raw_prompt()
@@ -143,8 +141,6 @@ fn add_dependency() -> Result<(), ProjectError> {
         0 => dependencies::add_cached_dependency(&mut config)?,
         1 => dependencies::add_git_submodule(&mut config)?,
         2 => dependencies::add_local_dependency(&mut config)?,
-        3 => dependencies::add_fetch_dependency(&mut config)?,
-        4 => todo!(),
         _ => return Err(ProjectError::UnknownArgument(dep_type.value.into())),
     }
 
@@ -216,10 +212,6 @@ fn generate_cmake() -> Result<(), ProjectError> {
     // Project top config
     writeln!(file, "\n#Project Config Flags:").unwrap();
 
-    if config.dependencies.fetch_content.is_empty() == false {
-        writeln!(file, "include(FetchContent)").unwrap();
-    }
-
     writeln!(file, "set(CMAKE_BUILD_TYPE Debug)").unwrap();
     writeln!(file, "set(CMAKE_EXPORT_COMPILE_COMMANDS ON)").unwrap();
 
@@ -263,27 +255,6 @@ fn generate_cmake() -> Result<(), ProjectError> {
         }
 
         writeln!(file, "").unwrap();
-    });
-
-    config.dependencies.fetch_content.iter().for_each(|fetch| {
-        fetch
-            .variables
-            .iter()
-            .for_each(|var| writeln!(file, "set({: <20} {: <20})", var.0, var.1).unwrap());
-
-        writeln!(file, "FetchContentDeclare({}", fetch.name).unwrap();
-        writeln!(file, "\tGIT_REPOSITORY {}", fetch.repo).unwrap();
-        if let Some(tag) = &fetch.tag {
-            writeln!(file, "\tGIT_TAG {}", tag).unwrap();
-        }
-        if let Some(branch) = &fetch.branch {
-            writeln!(file, "\tGIT_BRANCH {}", branch).unwrap();
-        }
-
-        writeln!(file, "\tGIT_SHALLOW TRUE").unwrap();
-        writeln!(file, "\tGIT_PROGRESS TRUE").unwrap();
-
-        writeln!(file, ")\nFetchContent_MakeAvailable({})\n", fetch.name).unwrap();
     });
 
     writeln!(file, "#Project Files:").unwrap();

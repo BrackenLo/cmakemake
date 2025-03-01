@@ -27,7 +27,6 @@ pub enum IncludeFiles {
 #[derive(serde::Deserialize, serde::Serialize, Hash)]
 pub struct Dependencies {
     pub local: Vec<LocalDependency>,
-    pub fetch_content: Vec<FetchDependency>,
 
     pub project_dependencies: Vec<String>,
 }
@@ -49,16 +48,6 @@ pub enum LocalType {
     },
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Hash)]
-pub struct FetchDependency {
-    pub name: String,
-    pub variables: Vec<(String, String)>,
-
-    pub repo: String,
-    pub tag: Option<String>,
-    pub branch: Option<String>,
-}
-
 impl Default for ConfigFile {
     fn default() -> Self {
         Self {
@@ -72,7 +61,6 @@ impl Default for ConfigFile {
             },
             dependencies: Dependencies {
                 local: Vec::new(),
-                fetch_content: Vec::new(),
                 project_dependencies: Vec::new(),
             },
         }
@@ -94,7 +82,6 @@ impl ConfigFile {
 #[derive(serde::Deserialize, serde::Serialize, Default)]
 pub struct Cache {
     pub git_submodules: Vec<(String, GitSubmodule)>,
-    pub fetch_content: Vec<(String, FetchDependency)>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Hash)]

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::{
-    config::{self, ConfigFile, FetchDependency, LocalDependency},
+    config::{self, ConfigFile, LocalDependency},
     error::{DisplayError, ProjectError},
     util::{
         dep_flag_validation, folder_validator, get_cache, not_own_folder_validator, path_formater,
@@ -147,52 +147,6 @@ pub fn add_local_dependency(config: &mut ConfigFile) -> Result<(), ProjectError>
         .unwrap();
 
     add_local_dependency_path(config, path)?;
-
-    Ok(())
-}
-
-pub fn add_fetch_dependency(config: &mut ConfigFile) -> Result<(), ProjectError> {
-    let dep_name = inquire::Text::new("Dependency Name:")
-        .with_validator(inquire::validator::ValueRequiredValidator::default())
-        .prompt()
-        .unwrap();
-
-    let repo = inquire::Text::new("Fetch Git Repo:")
-        .with_validator(inquire::validator::ValueRequiredValidator::default())
-        .prompt()
-        .unwrap();
-
-    let tag = match inquire::Text::new("Git Tag (optional):")
-        .prompt_skippable()
-        .unwrap()
-    {
-        Some(val) => match val.is_empty() {
-            true => None,
-            false => Some(val),
-        },
-        None => None,
-    };
-
-    let branch = match inquire::Text::new("Git Branch (optional):")
-        .prompt_skippable()
-        .unwrap()
-    {
-        Some(val) => match val.is_empty() {
-            true => None,
-            false => Some(val),
-        },
-        None => None,
-    };
-
-    let variables = get_dependency_variables();
-
-    config.dependencies.fetch_content.push(FetchDependency {
-        name: dep_name,
-        variables,
-        repo,
-        tag,
-        branch,
-    });
 
     Ok(())
 }
@@ -351,7 +305,7 @@ fn cache_git_submodule(submodule: config::GitSubmodule) -> Result<(), ProjectErr
 pub fn add_cached_dependency(config: &mut ConfigFile) -> Result<(), ProjectError> {
     let cache = get_cache()?;
 
-    if cache.git_submodules.is_empty() && cache.fetch_content.is_empty() {
+    if cache.git_submodules.is_empty() {
         println!("No cached dependencies available.");
         return Ok(());
     }
