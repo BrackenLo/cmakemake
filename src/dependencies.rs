@@ -373,12 +373,21 @@ pub fn add_find_dependency(config: &mut ConfigFile) -> Result<(), ProjectError> 
         .prompt()
         .unwrap();
 
+    let custom_link_name = inquire::Text::new("Specify Dependency link name: (optional)")
+        .prompt_skippable()
+        .unwrap()
+        .and_then(|val| match val.is_empty() {
+            true => None,
+            false => Some(val),
+        });
+
     config.dependencies.find.push(FindDependency {
         name: name.clone(),
         required,
+        custom_link_name: custom_link_name.clone(),
     });
 
-    get_is_project_dependency(config, name);
+    get_is_project_dependency(config, custom_link_name.unwrap_or(name));
 
     Ok(())
 }

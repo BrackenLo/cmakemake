@@ -39,6 +39,8 @@ pub struct Dependencies {
 pub struct FindDependency {
     pub name: String,
     pub required: bool,
+    #[serde(default)]
+    pub custom_link_name: Option<String>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Hash, Clone)]

@@ -52,7 +52,11 @@ fn print_help() {
         "cmakemake".cyan(),
         "[COMMAND]".cyan()
     );
-    println!("\t{}\t\t{}", "cmm".cyan(), "[COMMAND]".cyan());
+    println!(
+        "\t{}\t\t{}\t (recommended alias)",
+        "cmm".cyan(),
+        "[COMMAND]".cyan()
+    );
 
     let print_command = |cmd: &str, desc: &str| {
         println!("\t{}\t\t{}", cmd.cyan().bold(), desc);
@@ -402,12 +406,27 @@ fn run_project() -> Result<(), ProjectError> {
         println!("");
     }
 
-    duct::cmd!(format!("./build/{}", config.project.name))
+    let cmd_output = duct::cmd!(format!("./build/{}", config.project.name))
         .stderr_to_stdout()
+        .unchecked()
         .run()
         .unwrap();
 
-    println!("\n\n{} {}", "Finished".green().bold(), "program execution");
+    match cmd_output.status.success() {
+        true => println!(
+            "\n\n{} {} {}",
+            "Finished".green().bold(),
+            "program execution with exit code",
+            cmd_output.status.code().unwrap_or(0)
+        ),
+
+        false => println!(
+            "\n\n{} {} {}",
+            "Finished".red().bold(),
+            "program execution with exit code",
+            cmd_output.status.code().unwrap_or(255)
+        ),
+    }
 
     Ok(())
 }
