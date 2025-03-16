@@ -159,31 +159,133 @@ fn add_dependency() -> Result<(), ProjectError> {
     Ok(())
 }
 
-fn write_include_flags(
+fn write_source_files(
     file: &mut std::fs::File,
     source_name: &str,
     path: &str,
-    files: &config::IncludeFiles,
+    files: &config::ProjectFiles,
 ) -> Result<(), std::io::Error> {
-    let glob_sources = |glob: &str| {
-        format!(
-            r#"file({glob} {source_name} "{path}/*.cpp" "{path}/*.c" "{path}/*.hpp" "{path}/*.h")"#
-        )
+    if files.source_files.is_empty() {
+        return Ok(());
+    }
+
+    let mut individual_files = Vec::new();
+    let mut glob_dirs = Vec::new();
+    let mut glob_recurse_dirs = Vec::new();
+
+    files
+        .source_files
+        .iter()
+        .for_each(|(source_type, files)| match source_type {
+            config::SourceType::File => individual_files.extend(files),
+            config::SourceType::Glob => glob_dirs.extend(files),
+            config::SourceType::GlobRecurse => glob_recurse_dirs.extend(files),
+        });
+
+    let mut files_initialized = false;
+
+    if individual_files.is_empty() == false {
+        writeln!(
+            file,
+            "set({source_name} {})",
+            individual_files
+                .into_iter()
+                .fold(String::new(), |a, b| format!(r#"{}"{}/{}" "#, a, path, b)) // TODO - Check trim
+        )?;
+        files_initialized = true;
+    }
+
+    let mut write_glob_type = |glob_type: &str, dirs: Vec<&String>| -> Result<(), std::io::Error> {
+        if dirs.is_empty() {
+            return Ok(());
+        }
+
+        let dirs_string = dirs.iter().fold(String::new(), |a, dir| {
+            let path = match dir.as_str() == "." {
+                true => format!("{path}"),
+                false => format!("{path}/{dir}"),
+            };
+
+            format!(
+                r#"{}"{path}/*.cpp" "{path}/*.c" "{path}/*.hpp" "{path}/*.h" "#,
+                a
+            )
+        });
+
+        let src_name = format!("{source_name}_{glob_type}");
+
+        match files_initialized {
+            true => {
+                writeln!(file, r#"file({glob_type} {src_name} {})"#, dirs_string)?;
+                writeln!(file, "list(APPEND {source_name} ${{{src_name}}})")?;
+            }
+
+            false => {
+                writeln!(file, r#"file(GLOB {source_name} {})"#, dirs_string)?;
+                files_initialized = true;
+            }
+        }
+
+        Ok(())
     };
 
-    match files {
-        config::IncludeFiles::All => writeln!(file, "{}", glob_sources("GLOB_RECURSE"),),
-        config::IncludeFiles::Root => writeln!(file, "{}", glob_sources("GLOB")),
-        config::IncludeFiles::Exclude(items) => write!(
-            file,
-            "{}\nlist(REMOVE_ITEM SOURCES {})",
-            glob_sources("GLOB_RECURSE"),
-            items
-                .iter()
-                .fold(String::new(), |a, b| format!(r#"{} "{}/{}""#, a, path, b))
-        ),
-        config::IncludeFiles::Header => Ok(()),
+    write_glob_type("GLOB", glob_dirs)?;
+    write_glob_type("GLOB_RECURSE", glob_recurse_dirs)?;
+
+    if files.exclude_files.is_empty() == false {
+        let to_remove = files
+            .exclude_files
+            .iter()
+            .fold(String::new(), |a, b| format!(r#"{}"{}/{}" "#, a, path, b));
+
+        writeln!(file, "list(REMOVE_ITEM {source_name} {to_remove})")?;
     }
+
+    Ok(())
+}
+
+fn write_include_dirs(
+    file: &mut std::fs::File,
+    name: &str,
+    path: &str,
+    files: &config::ProjectFiles,
+) -> Result<(), std::io::Error> {
+    let mut other = Vec::new();
+    let mut interfaces = Vec::new();
+
+    files
+        .include_dirs
+        .iter()
+        .for_each(|(include_type, dirs)| match include_type {
+            config::IncludeType::Public => other.extend(dirs),
+            config::IncludeType::Interface => interfaces.extend(dirs),
+        });
+
+    let mut write_include_type =
+        |include_type: &str, dirs: Vec<&String>| -> Result<(), std::io::Error> {
+            if dirs.is_empty() {
+                return Ok(());
+            }
+
+            let dirs = dirs
+                .into_iter()
+                .fold(String::new(), |a, dir| match dir.as_str() == "." {
+                    true => format!(r#"{}"{}" "#, a, path),
+                    false => format!(r#"{}"{}/{}" "#, a, path, dir),
+                });
+
+            writeln!(
+                file,
+                "target_include_directories({name} {include_type} {dirs})"
+            )?;
+
+            Ok(())
+        };
+
+    write_include_type("PUBLIC", other)?;
+    write_include_type("INTERFACE", interfaces)?;
+
+    Ok(())
 }
 
 fn generate_cmake() -> Result<(), ProjectError> {
@@ -243,7 +345,7 @@ fn generate_cmake() -> Result<(), ProjectError> {
         local
             .variables
             .iter()
-            .for_each(|var| writeln!(file, "set({: <20} {: <20})", var.0, var.1).unwrap());
+            .for_each(|var| writeln!(file, "set({: <20} {})", var.0, var.1).unwrap());
 
         match &local.local_type {
             config::LocalType::CMake => writeln!(file, "add_subdirectory({})", local.path).unwrap(),
@@ -252,24 +354,18 @@ fn generate_cmake() -> Result<(), ProjectError> {
                 files,
                 dependencies,
             } => {
-                let path = &local.path;
                 let name = &local.name;
 
                 let src_name = format!("{}_SOURCES", name.to_uppercase());
 
-                match files {
-                    config::IncludeFiles::Header => {
-                        writeln!(file, "add_library({name} INTERFACE)").unwrap();
-                        writeln!(file, "target_include_directories({name} INTERFACE {path})")
-                            .unwrap();
-                    }
+                write_source_files(&mut file, &src_name, &local.path, files).unwrap();
 
-                    _ => {
-                        write_include_flags(&mut file, &src_name, &local.path, files).unwrap();
-                        writeln!(file, "add_library({name} ${{{src_name}}})").unwrap();
-                        writeln!(file, "target_include_directories({name} PUBLIC {path})").unwrap();
-                    }
+                match files.source_files.is_empty() {
+                    true => writeln!(file, "add_library({name} INTERFACE)").unwrap(),
+                    false => writeln!(file, "add_library({name} ${{{src_name}}})").unwrap(),
                 }
+
+                write_include_dirs(&mut file, name, &local.path, files).unwrap();
 
                 if dependencies.is_empty() == false {
                     writeln!(
@@ -290,20 +386,23 @@ fn generate_cmake() -> Result<(), ProjectError> {
     writeln!(file, "#Project Files:").unwrap();
 
     // Project files
-    write_include_flags(&mut file, "SOURCES", "src", &config.cmake.files).unwrap();
+    write_source_files(&mut file, "SOURCES", "src", &config.cmake.files).unwrap();
 
     // Link files
     writeln!(file, r#"add_executable("${{PROJECT_NAME}}" ${{SOURCES}})"#).unwrap();
-    writeln!(
-        file,
-        r#"target_link_libraries("${{PROJECT_NAME}}" PRIVATE {})"#,
-        config
-            .dependencies
-            .project_dependencies
-            .iter()
-            .fold(String::new(), |a, b| format!("{} {}", a, b))
-    )
-    .unwrap();
+
+    if config.dependencies.project_dependencies.is_empty() == false {
+        writeln!(
+            file,
+            r#"target_link_libraries("${{PROJECT_NAME}}" PRIVATE {})"#,
+            config
+                .dependencies
+                .project_dependencies
+                .iter()
+                .fold(String::new(), |a, b| format!("{} {}", a, b))
+        )
+        .unwrap();
+    }
 
     file.flush().unwrap();
 

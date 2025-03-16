@@ -3,11 +3,11 @@
 pub struct ConfigFile {
     pub project: Project,
     pub cmake: CMake,
-    #[serde(default)]
     pub dependencies: Dependencies,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Hash)]
+#[serde(default)]
 pub struct Project {
     pub name: String,
     pub version: ordered_float::OrderedFloat<f64>,
@@ -23,26 +23,72 @@ impl Default for Project {
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Hash)]
+#[serde(default)]
 pub struct CMake {
     pub minimum_required: ordered_float::OrderedFloat<f64>,
-    pub files: IncludeFiles,
+    pub files: ProjectFiles,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Clone, Hash)]
+#[serde(default)]
+pub struct ProjectFiles {
+    pub source_files: Vec<(SourceType, Vec<String>)>,
+    pub include_dirs: Vec<(IncludeType, Vec<String>)>,
+    pub exclude_files: Vec<String>,
+}
+
+impl Default for ProjectFiles {
+    fn default() -> Self {
+        Self::all()
+    }
+}
+
+impl ProjectFiles {
+    pub fn all() -> Self {
+        Self {
+            source_files: vec![(SourceType::GlobRecurse, vec![".".into()])],
+            include_dirs: vec![(IncludeType::Public, vec![".".into()])],
+            exclude_files: Vec::new(),
+        }
+    }
+
+    pub fn root() -> Self {
+        Self {
+            source_files: vec![(SourceType::Glob, vec![".".into()])],
+            include_dirs: vec![(IncludeType::Public, vec![".".into()])],
+            exclude_files: Vec::new(),
+        }
+    }
+
+    pub fn header() -> Self {
+        Self {
+            source_files: Vec::new(),
+            include_dirs: vec![(IncludeType::Interface, Vec::new())],
+            exclude_files: Vec::new(),
+        }
+    }
 }
 
 impl Default for CMake {
     fn default() -> Self {
         Self {
             minimum_required: ordered_float::OrderedFloat(3.15),
-            files: IncludeFiles::All,
+            files: ProjectFiles::default(),
         }
     }
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Clone, Hash)]
-pub enum IncludeFiles {
-    All,
-    Root,
-    Exclude(Vec<String>),
-    Header,
+#[derive(serde::Deserialize, serde::Serialize, Clone, Copy, Hash)]
+pub enum SourceType {
+    File,
+    Glob,
+    GlobRecurse,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Clone, Copy, Hash)]
+pub enum IncludeType {
+    Public,
+    Interface,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Default, Hash)]
@@ -74,7 +120,7 @@ pub struct LocalDependency {
 pub enum LocalType {
     CMake,
     Source {
-        files: IncludeFiles,
+        files: ProjectFiles,
         dependencies: Vec<String>,
     },
 }

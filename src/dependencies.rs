@@ -84,20 +84,20 @@ pub fn add_local_dependency_path(
             let files = inquire::Select::new(
                 "Included files",
                 vec![
-                    "All",           // 0
-                    "Root",          // 1
-                    "All (Exclude)", // 2
-                    "Header Only",   // 3
+                    "All",         // 0
+                    "Root",        // 1
+                    "Header Only", // 2
+                    "Custom",      // 3
                 ],
             )
             .raw_prompt()
             .unwrap();
 
             let files = match files.index {
-                0 => config::IncludeFiles::All,
-                1 => config::IncludeFiles::Root,
-                2 => todo!(),
-                3 => config::IncludeFiles::Header,
+                0 => config::ProjectFiles::all(),
+                1 => config::ProjectFiles::root(),
+                2 => config::ProjectFiles::header(),
+                3 => todo!(),
 
                 _ => return Err(ProjectError::UnknownArgument(files.value.into())),
             };
