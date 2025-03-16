@@ -102,7 +102,7 @@ fn new_project() -> Result<(), ProjectError> {
     // Init Git Repo
     git2::Repository::init(&path).map_err(|err| ProjectError::FailedToInitGit(err.to_string()))?;
 
-    init_file(&path.join(Path::new(".gitignore")), b"build")?;
+    init_file(&path.join(Path::new(".gitignore")), b"build/\n.cache/")?;
 
     // Init Config File
     let config = ConfigFile::new(name);
@@ -489,7 +489,7 @@ fn add_ignore() -> Result<(), ProjectError> {
         }
         false => {
             println!("Creating .ignore file");
-            init_file(&Path::new(".ignore"), b"external/\nres/")?;
+            init_file(&Path::new(".ignore"), b"external/\nres/\n")?;
         }
     }
 
